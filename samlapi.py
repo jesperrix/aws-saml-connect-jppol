@@ -208,8 +208,8 @@ del username
 del password
 
 for saml2attribute in root.iter('{urn:oasis:names:tc:SAML:2.0:assertion}Attribute'): 
-    if (saml2attribute.get('Name') == 'https://aws.amazon.com/SAML/Attributes/Role'): 
-        for saml2attributevalue in saml2attribute.iter('{urn:oasis:names:tc:SAML:2.0:assertion}AttributeValue'):
+	if (saml2attribute.get('Name') == 'https://aws.amazon.com/SAML/Attributes/Role'): 
+		for saml2attributevalue in saml2attribute.iter('{urn:oasis:names:tc:SAML:2.0:assertion}AttributeValue'):
 		principal, role_arn = saml2attributevalue.text.split(',')
 
 		## add principal to accounts
