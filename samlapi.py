@@ -168,9 +168,27 @@ print(response)
 
 assertion = getAssertionFromResponse(response)
  
-# Parse the returned assertion and extract the authorized roles 
-unfilteredawsroles = []
-awsroles = []
+## Get account and role names
+r = session.post("https://signin.aws.amazon.com/saml", data={"SAMLResponse": assertion})
+soup = BeautifulSoup(r.text, features="html.parser")
+
+accounts_elm = soup.find_all("div", class_="saml-account")
+accounts = []
+num_roles = 0
+for acc in accounts_elm:
+	try:
+		account_name = acc.find("div", class_="saml-account-name").get_text().replace("Account: ", "")
+		account_roles = []
+		roles_elm = acc.find_all("div", class_="saml-role")
+		for role in roles_elm:
+			role_name = role.find("label").get_text()
+			role_arn = role.find("input")["value"]
+			account_roles.append({"arn": role_arn, "name": role_name})
+			num_roles += 1
+		accounts.append({"name": account_name, "roles": account_roles})
+	except Exception as e:
+		continue
+
 try:
 	root = ET.fromstring(base64.b64decode(assertion))
 except: 
@@ -192,50 +210,57 @@ del password
 for saml2attribute in root.iter('{urn:oasis:names:tc:SAML:2.0:assertion}Attribute'): 
     if (saml2attribute.get('Name') == 'https://aws.amazon.com/SAML/Attributes/Role'): 
         for saml2attributevalue in saml2attribute.iter('{urn:oasis:names:tc:SAML:2.0:assertion}AttributeValue'):
-            unfilteredawsroles.append(saml2attributevalue.text)
- 
-# Note the format of the attribute value should be role_arn,principal_arn 
-# but lots of blogs list it as principal_arn,role_arn so let's reverse 
-# them if needed 
-for awsrole in unfilteredawsroles:
-    chunks = awsrole.split(',') 
-    if'saml-provider' in chunks[0]:
-        newawsrole = chunks[1] + ',' + chunks[0] 
-        index = unfilteredawsroles.index(awsrole)
-        unfilteredawsroles.insert(index, newawsrole)
-        unfilteredawsroles.remove(awsrole)
+		principal, role_arn = saml2attributevalue.text.split(',')
 
-for awsrole in unfilteredawsroles:
-    if settings.getFilter() in awsrole:
-        awsroles.insert(0, awsrole)
+		## add principal to accounts
+		for account in accounts:
+			for role in account["roles"]:
+				if role["arn"] == role_arn:
+					role["principal"] = principal
 
 # If I have more than one role, ask the user which one they want, 
 # otherwise just proceed 
 print("" )
-if len(awsroles) > 1: 
-    i = 0 
-    print("Please choose the role you would like to assume:" )
-    for awsrole in awsroles: 
-        print('[', i, ']: ', awsrole.split(',')[0] )
-        i += 1 
+if num_roles > 1:
+	i = 0
+	print("Please choose the role you would like to assume:" )
+	# for awsrole in awsroles:
+		# print('[', i, ']: ', awsrole.split(',')[0] )
+		# i += 1
+	for account in accounts:
+		print(account["name"])
+		for role in account["roles"]:
+			print(f" [{i}] {role['name']}")
+			i += 1
 
-    print("Selection: ", )
-    selectedroleindex = input() 
- 
-    # Basic sanity check of input 
-    if int(selectedroleindex) > (len(awsroles) - 1): 
-        print('You selected an invalid role index, please try again' )
-        sys.exit(0) 
- 
-    role_arn = awsroles[int(selectedroleindex)].split(',')[0] 
-    principal_arn = awsroles[int(selectedroleindex)].split(',')[1]
- 
-elif len(awsroles) == 1: 
-    role_arn = awsroles[0].split(',')[0] 
-    principal_arn = awsroles[0].split(',')[1]
+	print("Selection: ", )
+	selectedroleindex = input()
+
+
+
+	# Find selected role
+	selected_role = None
+	i = 0
+	for account in accounts:
+		for role in account["roles"]:
+			if int(selectedroleindex) == i:
+				selected_role = role
+			i += 1
+
+	if selected_role == None:
+		print('You selected an invalid role index, please try again' )
+		sys.exit(0)
+
+	role_arn = selected_role['arn']
+	principal_arn = selected_role['principal']
+
+elif num_roles == 1:
+	role_arn = accounts[0]["roles"][0]["arn"]
+	principal_arn = accounts[0]["roles"][0]["principal"]
 else:
-    print ("No roles returned. (If you have provided a filter you might test the unfiltered result.")
-    quit()
+	print ("No roles returned. (If you have provided a filter you might test the unfiltered result.")
+	quit()
+
 
 # Use the assertion to get an AWS STS token using Assume Role with SAML
 conn = boto3.client('sts')
