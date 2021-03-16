@@ -168,6 +168,20 @@ print(response)
 
 assertion = getAssertionFromResponse(response)
 
+# Parse the returned assertion and extract the authorized roles
+try:
+    root = ET.fromstring(base64.b64decode(assertion))
+except:
+    print('An exception occurred using NTLM negotiation. retrying with post to sts.rootdom.dk')
+    payload = {'UserName': settings.getUsername(), 'Password': settings.getPassword(), 'optionForms': 'FormsAuthentication' }
+    session.auth = None
+    session.get(url = idpentryurl, headers = headers, verify = sslverification)
+    response = session.post(url = idpentryurl, headers=headers, verify=sslverification, data = payload)
+    assertion = getAssertionFromResponse(response)
+    root = ET.fromstring(base64.b64decode(assertion))
+    print(root)
+
+
 ## Get account and role names
 r = session.post("https://signin.aws.amazon.com/saml", data={"SAMLResponse": assertion})
 soup = BeautifulSoup(r.text, features="html.parser")
@@ -189,21 +203,6 @@ for acc in accounts_elm:
     except Exception as e:
         continue
 
-
-# Parse the returned assertion and extract the authorized roles
-# unfilteredawsroles = []
-# awsroles = []
-try:
-    root = ET.fromstring(base64.b64decode(assertion))
-except:
-    print('An exception occurred using NTLM negotiation. retrying with post to sts.rootdom.dk')
-    payload = {'UserName': settings.getUsername(), 'Password': settings.getPassword(), 'optionForms': 'FormsAuthentication' }
-    session.auth = None
-    session.get(url = idpentryurl, headers = headers, verify = sslverification)
-    response = session.post(url = idpentryurl, headers=headers, verify=sslverification, data = payload)
-    assertion = getAssertionFromResponse(response)
-    root = ET.fromstring(base64.b64decode(assertion))
-    print(root)
 
 # Overwrite and delete the credential variables, just for safety
 username = '##############################################'
