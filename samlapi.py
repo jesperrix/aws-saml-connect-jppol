@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from colorama import Fore, Style
 import sys
 import boto3
 import requests
@@ -61,7 +62,7 @@ class CommandLineArguments:
         self.parser.add_argument("-d", "--domain", help="Specify domain. Defaults to the userdomain environment and if not polhus", default=os.environ.get('userdomain', "polhus"))
         self.parser.add_argument("-a", "--ask", help="Ask user for all values. Defaults from other command line arguments", action='store_true')
         self.parser.add_argument("-td", "--tokenDuration", help="Token duration in seconds. Default is 3600 which is the default in AWS, but generally speaking longer durations are more convenient.", default="3600")
-        self.parser.add_argument("-f", "--filter", help="Filter for returned role values. Specify full name (or unique match) to avoid selecting role and login directly.", default = "")
+        self.parser.add_argument("-f", "--filter", help="Filter for returned role arns. Specify full arn (or unique match) to avoid selecting role and login directly.", default = "")
         self.args = self.parser.parse_args()
 
     def getProfile(self):
@@ -220,6 +221,20 @@ for saml2attribute in root.iter('{urn:oasis:names:tc:SAML:2.0:assertion}Attribut
                     if role["arn"] == role_arn:
                         role["principal"] = principal
 
+filter = settings.getFilter()
+if filter != "":
+    num_roles = 0
+    tmp_accounts = []
+    for acc in accounts.copy():
+        tmp_account = acc
+        tmp_roles = [x for x in acc["roles"] if filter in x["arn"]]
+        if len(tmp_roles) > 0:
+            num_roles += len(tmp_roles)
+            tmp_account["roles"] = tmp_roles
+            tmp_accounts.append(tmp_account)
+
+    accounts = tmp_accounts
+
 # If I have more than one role, ask the user which one they want,
 # otherwise just proceed
 print("" )
@@ -230,9 +245,10 @@ if num_roles > 1:
         # print('[', i, ']: ', awsrole.split(',')[0] )
         # i += 1
     for account in accounts:
-        print(account["name"])
+        # print(f'{Fore.WHITE}{account["name"]}{Style.RESET_ALL}')
+        print(f'{Fore.GREEN}{account["name"]}{Style.RESET_ALL}')
         for role in account["roles"]:
-            print(f" [{i}] {role['name']}")
+            print(f" [{Fore.GREEN}{i}{Style.RESET_ALL}] {Fore.WHITE}{role['name']}{Style.RESET_ALL} {Fore.LIGHTBLACK_EX}{role['arn']}{Style.RESET_ALL}")
             i += 1
 
     print("Selection: ", )
